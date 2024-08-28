@@ -1,0 +1,4 @@
+stage-marker-image:
+  - name: image.Jenkinsfile
+stage-marker-package:
+  - name: package.Jenkinsfile

@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: generic-odp-logshipper-cfg
+data:
+  fluent-bit.conf: |
+    @INCLUDE /etc/fluent-bit/inputs.conf
+    @INCLUDE /etc/fluent-bit/outputs.conf
+    @INCLUDE /etc/fluent-bit/filters.conf
+
+    [SERVICE]
+        flush           3
+        grace           10
+        log_level       info
+        parsers_file    /etc/fluent-bit/parsers.conf
+        http_server     on
+        http_listen     localhost
+        http_port       2020
+        storage.metrics on
+  parsers.conf: |
+    [PARSER]
+        name   json
+        format json
+  inputs.conf: |
+    [INPUT]
+        name              tail
+        tag               event.fluent-bit
+        alias             log_shipper
+        buffer_chunk_size 32k
+        buffer_max_size   32k
+        path              /var/lib/eric-odp-logger/logshipper.log
+        path_key          filename
+        read_from_head    true
+        refresh_interval  5
+        rotate_wait       10
+        skip_empty_lines  off
+        skip_long_lines   off
+        key               message
+        db                /var/lib/eric-odp-logger/logshipper.db
+        db.sync           normal
+        db.locking        true
+        db.journal_mode   off
+        parser            json
+        mem_buf_limit     1MB
+    [INPUT]
+        name              tail
+        tag               event.file0
+        alias             file0
+        buffer_chunk_size 32k
+        buffer_max_size   32k
+        read_from_head    true
+        refresh_interval  5
+        rotate_wait       10
+        skip_empty_lines  off
+        skip_long_lines   off
+        key               message
+        db                /var/lib/eric-odp-logger/file0.db
+        db.sync           normal
+        db.locking        true
+        db.journal_mode   off
+        path              /var/lib/eric-odp-logger/enm-odp.log*
+        path_key          filename
+        exclude_path      /var/lib/eric-odp-logger/logshipper.log
+        mem_buf_limit     1MB
+  filters.conf: |
+    [FILTER]
+        name     parser
+        match    event.file0
+        parser   json
+        key_name message
+        reserve_data true
+    [FILTER]
+        name          nest
+        match         event.*
+        operation     lift
+        nested_under  extra_data
+        add_prefix    extradata.
+    [FILTER]
+        name          nest
+        match         event.*
+        operation     nest
+        wildcard      filename*
+        nest_under    fluentbit
+    [FILTER]
+        name          nest
+        match         event.*
+        operation     nest
+        wildcard      fluentbit*
+        wildcard      extradata.*
+        nest_under    extra_data
+        remove_prefix extradata.
+    [FILTER]
+        name  modify
+        match event.fluent-bit
+        add   metadata.container_name ${CONTAINER_NAME}
+    [FILTER]
+        name          modify
+        match         event.*
+        condition     key_does_not_exist version
+        add           version            1.2.0
+    [FILTER]
+        name          modify
+        match         event.*
+        condition     key_does_not_exist service_id
+        add           service_id         eric-amos-odp
+    [FILTER]
+        name          modify
+        match         event.*
+        condition     key_does_not_exist severity
+        add           severity           info
+    [FILTER]
+        name  modify
+        match event.*
+        add   metadata.namespace ${NAMESPACE}
+        add   metadata.node_name ${NODE_NAME}
+        add   metadata.pod_name  ${POD_NAME}
+        add   metadata.pod_uid   ${POD_UID}
+    [FILTER]
+        name          nest
+        match         event.*
+        operation     lift
+        nested_under  metadata
+        add_prefix    metadata.
+    [FILTER]
+        name          nest
+        match         event.*
+        operation     nest
+        wildcard      metadata.*
+        nest_under    metadata
+        remove_prefix metadata.
+  outputs.conf: |
+    [OUTPUT]
+        name                 http
+        match                event.*
+        alias                log_transformer
+        json_date_key        false
+        host                 eric-log-transformer
+        port                 9080
+        retry_limit          false
+        log_response_payload false
+        format               json

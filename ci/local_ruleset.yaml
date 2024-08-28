@@ -1,0 +1,252 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+modelVersion: 2.0
+
+description: "PM Stats Exporter service is in the PM Stats Calculation Handling app. It exports periodically the calculated KPIs by PM Stats Calculator onto Kafka."
+
+import:
+  common: ../common-properties.yaml
+  common-rules: common_ruleset2.0.yaml
+
+# See image catalog: https://confluence.lmera.ericsson.se/display/ACD/ADP+CICD+Docker+Image+Catalog
+docker-images:
+  - adp-asciidoc-builder: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-asciidocbuilder:${env.ASCII_DOC_BUILDER_TAG}
+  - adp-helm-dr-check: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/common-library-adp-helm-dr-check:${env.HELM_DR_CHECK_TAG}
+  - adp-helm-kubectl: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-py3kubehelmbuilder:${env.HELM_KUBECTL_TAG}
+  - adp-maven-builder: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-java17mvnbuilder:${env.MVN_BUILDER_TAG}
+  - adp-release-auto: armdocker.rnd.ericsson.se/proj-adp-cicd-drop/bob-adp-release-auto:${env.RELEASE_AUTO_TAG}
+
+# List of constants
+properties:
+  # Docker
+  - image-secret: armdocker
+  - image-registry: armdocker.rnd.ericsson.se
+  - image-repopath-dev: ${image-registry}/proj-eric-oss-dev
+  - image-repopath-internal: ${image-registry}/proj-eric-oss-ci-internal
+  - image-repopath-drop: ${image-registry}/proj-eric-oss-drop
+  - image-full-name-dev: ${image-repopath-dev}/${common.docker-image-name}
+  - image-full-name-internal: ${image-repopath-internal}/${common.docker-image-name}
+  - image-full-name-drop: ${image-repopath-drop}/${common.docker-image-name}
+
+  - odp-sles-base-image-full-name-dev: ${image-repopath-dev}/eric-odp-sles-base
+  - odp-sles-base-image-full-name-internal: ${image-repopath-internal}/eric-odp-sles-base
+  - odp-sles-base-image-full-name-drop: ${image-repopath-drop}/eric-odp-sles-base
+  
+  - odp-init-image-full-name-dev: ${image-repopath-dev}/eric-odp-init
+  - odp-init-image-full-name-internal: ${image-repopath-internal}/eric-odp-init
+  - odp-init-image-full-name-drop: ${image-repopath-drop}/eric-odp-init
+  
+  - odp-main-container-image-full-name-dev: ${image-repopath-dev}/eric-odp-main-container
+  - odp-main-container-image-full-name-internal: ${image-repopath-internal}/eric-odp-main-container
+  - odp-main-container-image-full-name-drop: ${image-repopath-drop}/eric-odp-main-container
+
+  # Git repository name in GitCA
+  - gitca-repo-name: ${common.gitca-repo-name}
+  
+  # Released docker ARM repo project name
+  - project-subpath: proj-eric-oss
+  
+  # docker/helm repository name in ACA
+  - aca-container-name: ${common.aca-container-name}
+  
+# import environment variables (For example: Jenkins parameters)
+env:
+  - HOME
+  - MAVEN_CLI_OPTS (default=-Duser.home=${env.HOME} -B)
+  - MAVEN_OPTS (default=-Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn)
+  - PWD
+  - PROJ_MVN (default=/proj/mvn)
+  - GERRIT_PATCHSET_REVISION (default=HEAD)
+  - PRI_PREPARED (default=adpauto)
+  - PRI_APPROVER (default="adpauto")
+  - PRI_RESPONSIBLE (default="ESZAZSE")
+  - ENABLE_MVN_TEST_OUTPUT (default=true)
+  - ENABLE_DR_CHECKER_SCREEN_OUTPUT (default=true)
+  - DOCKER_VOLUME_MAPPING_PASSWD (default=--volume ${env.HOME}/mypasswd:/etc/passwd:ro)
+
+  # Default docker image tags
+  - MVN_BUILDER_TAG (default=latest)
+  - HELM_DR_CHECK_TAG (default=latest)
+  - DOC_BUILDER_TAG (default=latest)
+  - HELM_KUBECTL_TAG (default=latest)
+  - RELEASE_AUTO_TAG (default=latest)
+
+  # ADP Marketplace
+  - ADP_PORTAL_API_KEY
+
+  # Kubernetes
+  - COLLECT_LOGS_SCRIPT_LOCATION (default="https://arm.sero.gic.ericsson.se/artifactory/proj-ADP_GS_Support_FTP-generic-local/collect_ADP_logs")
+  - ENABLE_HELM_V3 (default=true)
+  - K8S_NAMESPACE (default=${common.helm-chart-name}-${var.commithash})
+  - KUBECONFIG
+
+  # Credentials
+  - ERIDOC_USERNAME
+  - ERIDOC_PASSWORD
+  - GERRIT_USERNAME
+  - GERRIT_PASSWORD
+  - JIRA_USERNAME (default=ossadmin)
+  - JIRA_PASSWORD
+  - SELI_ARTIFACTORY_REPO_USER
+  - SELI_ARTIFACTORY_REPO_PASS
+
+  # mimer
+  - RELEASE_CANDIDATE (default=${var.version})
+  - MUNIN_TOKEN
+  - GITCA_USERNAME
+  - GITCA_PASSWORD
+  - ACA_USERNAME
+  - ACA_PASSWORD
+  - MUNIN_DRY_RUN (default=false)
+
+# Variables, set by below tasks
+var:
+  - commithash
+  - commithash-full
+  - commit-author
+  - commit-email
+  - docker-config-basepath
+  - image-registry
+  - helm-chart-repo-internal
+  - image-full-name-internal
+  - image-repopath-internal
+  - image-repopath-drop
+  - pom-version
+  - rest2html-optional
+  - revision
+  - rstate
+  - version
+  - version-prefix
+  - image-dr-vm-args
+  - kaas-version
+  - kaas-current-context
+  - resultcode_hadolint_check
+  - save-namespace
+  - cbos-version
+  - cbos-repo
+  - cbos-name
+
+# Rules to execute
+rules:
+
+  image:
+    - task: docker-build-all-images-internal
+      cmd: 
+      - docker build ${env.PWD}
+        --file Dockerfile
+        --tag ${odp-sles-base-image-full-name-internal}:${var.version}
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+        --build-arg COMMIT=${var.commithash}
+        --build-arg APP_VERSION=${var.version}
+        --build-arg RSTATE=${var.rstate}
+        --build-arg IMAGE_PRODUCT_NUMBER=${common.image-product-number}
+        --build-arg CBOS_IMAGE_TAG=${common.cbos-image-version}
+        --build-arg CBOS_IMAGE_REPO=${common.cbos-image-repo}
+        --build-arg CBOS_IMAGE_NAME=${common.cbos-image-name}
+        --target eric-odp-sles-base
+
+      - docker build ${env.PWD}
+        --file Dockerfile
+        --tag ${odp-init-image-full-name-internal}:${var.version}
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+        --build-arg COMMIT=${var.commithash}
+        --build-arg APP_VERSION=${var.version}
+        --build-arg RSTATE=${var.rstate}
+        --build-arg IMAGE_PRODUCT_NUMBER=${common.image-product-number}
+        --build-arg CBOS_IMAGE_TAG=${common.cbos-image-version}
+        --build-arg CBOS_IMAGE_REPO=${common.cbos-image-repo}
+        --build-arg CBOS_IMAGE_NAME=${common.cbos-image-name}
+        --target eric-odp-init
+        
+      - docker build ${env.PWD}
+        --file Dockerfile
+        --tag ${odp-main-container-image-full-name-internal}:${var.version}
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+        --build-arg COMMIT=${var.commithash}
+        --build-arg APP_VERSION=${var.version}
+        --build-arg RSTATE=${var.rstate}
+        --build-arg IMAGE_PRODUCT_NUMBER=${common.image-product-number}
+        --build-arg CBOS_IMAGE_TAG=${common.cbos-image-version}
+        --build-arg CBOS_IMAGE_REPO=${common.cbos-image-repo}
+        --build-arg CBOS_IMAGE_NAME=${common.cbos-image-name}
+        --target eric-odp-main-container
+
+    - task: docker-push-all-images-internal
+      cmd:
+        - docker push ${odp-sles-base-image-full-name-internal}:${var.version}
+        - docker push ${odp-init-image-full-name-internal}:${var.version}
+        - docker push ${odp-main-container-image-full-name-internal}:${var.version}
+        
+    - task: docker-build-all-images-release
+      cmd:
+      - docker build ${env.PWD}
+        --file Dockerfile
+        --tag ${odp-sles-base-image-full-name-drop}:${var.version}
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+        --build-arg COMMIT=${var.commithash}
+        --build-arg APP_VERSION=${var.version}
+        --build-arg RSTATE=${var.rstate}
+        --build-arg IMAGE_PRODUCT_NUMBER=${common.image-product-number}
+        --build-arg CBOS_IMAGE_TAG=${common.cbos-image-version}
+        --build-arg CBOS_IMAGE_REPO=${common.cbos-image-repo}
+        --build-arg CBOS_IMAGE_NAME=${common.cbos-image-name}
+        --target eric-odp-sles-base
+
+      - docker build ${env.PWD}
+        --file Dockerfile
+        --tag ${odp-init-image-full-name-drop}:${var.version}
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+        --build-arg COMMIT=${var.commithash}
+        --build-arg APP_VERSION=${var.version}
+        --build-arg RSTATE=${var.rstate}
+        --build-arg IMAGE_PRODUCT_NUMBER=${common.image-product-number}
+        --build-arg CBOS_IMAGE_TAG=${common.cbos-image-version}
+        --build-arg CBOS_IMAGE_REPO=${common.cbos-image-repo}
+        --build-arg CBOS_IMAGE_NAME=${common.cbos-image-name}
+        --target eric-odp-init
+        
+      - docker build ${env.PWD}
+        --file Dockerfile
+        --tag ${odp-main-container-image-full-name-drop}:${var.version}
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+        --build-arg COMMIT=${var.commithash}
+        --build-arg APP_VERSION=${var.version}
+        --build-arg RSTATE=${var.rstate}
+        --build-arg IMAGE_PRODUCT_NUMBER=${common.image-product-number}
+        --build-arg CBOS_IMAGE_TAG=${common.cbos-image-version}
+        --build-arg CBOS_IMAGE_REPO=${common.cbos-image-repo}
+        --build-arg CBOS_IMAGE_NAME=${common.cbos-image-name}
+        --target eric-odp-main-container
+
+    - task: docker-push-all-images-release
+      cmd:
+        - docker push ${odp-sles-base-image-full-name-drop}:${var.version}
+        - docker push ${odp-init-image-full-name-drop}:${var.version}
+        - docker push ${odp-main-container-image-full-name-drop}:${var.version}
+        
+        
+  # Delete docker images created
+  delete-images-from-agent:
+    - task: delete-internal-image
+      cmd: docker image remove ${var.image-full-name-internal}:${var.version} $(docker images -f "dangling=true" -q) || true
+    - task: delete-drop-image
+      cmd: docker image remove ${image-full-name}:${var.version} $(docker images -f "dangling=true" -q) || true
+    - task: cleanup-anchore-trivy-images
+      cmd:
+      - docker image remove ${grype-image}:${env.ANCHORE_TAG} $(docker images -f "dangling=true" -q) || true
+      - docker image remove ${trivy-image}:${env.TRIVY_TAG} $(docker images -f "dangling=true" -q) || true
+      - docker image remove ${image-to-scan} $(docker images -f "dangling=true" -q) || true
